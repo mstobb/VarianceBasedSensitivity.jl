@@ -11,9 +11,10 @@ export makeNewSobolSamples!
 export +
 export makeC, makeC!, makeCij
 export sobolSampler, sobolSamplerSij
+export sobolSamplerSingle
 export computeSensSi, computeSensSiT
 export computeSensSij
-export sensSiSTD, sensSiTSTD
+export sensSiSTD, sensSiTSTD, sensSijSTD
 
 abstract type SobolEvals end
 
@@ -118,48 +119,45 @@ import Base.+
 function +(x::SobolSamples,y::SobolSamples)
     # If the distributions match, add together
     if x.dist == y.dist
-        x.N += y.N
-        x.A = vcat(x.A,y.A)
-        x.B = vcat(x.B,y.B)
-    elseso
+	z = SobolSamples((x.N+y.N),x.P,x.dist,vcat(x.A,y.A),vcat(x.B,y.B))
+    else
         error("Distributions don't match!")
     end
-    y = 0
+    z
 end
 
 
 function +(x::SobolEvalsSingle,y::SobolEvalsSingle)
     # If the distributions match, add together
     if (x.dist == y.dist)
-        x.N += y.N
-        x.fA = vcat(x.fA,y.fA)
-        x.fB = vcat(x.fB,y.fB)
+	tempfC = Array{Array{Float64,2}}(x.P)
         for i = 1:x.P
-            x.fC[i] = vcat(x.fC[i],y.fC[i])
+            tempfC[i] = vcat(x.fC[i],y.fC[i])
         end
+	z = SobolEvalsSingle((x.N+y.N),x.P,x.dist,vcat(x.fA,y.fA),vcat(x.fB,y.fB),tempfC)
     else
         error("Distributions don't match!")
     end
-    y = 0
+    z
 end
 
 
 function +(x::SobolEvalsSingleAndJoint,y::SobolEvalsSingleAndJoint)
     # If the distributions match, add together
     if (x.dist == y.dist)
-        x.N += y.N
-        x.fA = vcat(x.fA,y.fA)
-        x.fB = vcat(x.fB,y.fB)
+	tempfC = Array{Array{Float64,2}}(x.P)
         for i = 1:x.P
-            x.fC[i] = vcat(x.fC[i],y.fC[i])
+            tempfC[i] = vcat(x.fC[i],y.fC[i])
         end
+	tempfCij = Array{Array{Float64,2}}(length(x.Cpairs))
         for i = 1:length(x.Cpairs)
-            x.fCij[i] = vcat(x.fCij[i],y.fCij[i])
+            tempfCij[i] = vcat(x.fCij[i],y.fCij[i])
         end
+	z = SobolEvalsSingleAndJoint((x.N+y.N),x.P,x.dist,vcat(x.fA,y.fA),vcat(x.fB,y.fB),tempfC,x.Cpairs,tempfCij)
     else
         error("Distributions don't match!")
     end
-    y = 0
+    z
 end
 
 
@@ -206,9 +204,10 @@ function sobolSamplerSingle(f::Function,sob::SobolSamples)
 
     fout = f(sob.A[1,:])
 
-    sample_results = zeros(sob.N*(sob.P + 2),length(fout))
+    #sample_results = zeros(sob.N*(sob.P + 2),length(fout))
+    sample_results = SharedArray{Float64,2}((sob.N*(sob.P + 2),length(fout)), init = 0)
     
-    for i = 1:size(sample_results,1)
+    @sync @parallel for i = 1:size(sample_results,1)
         if i < sob.N + 1
             sample_results[i,:] = f(sob.A[i,:])
 
@@ -229,6 +228,10 @@ function sobolSamplerSingle(f::Function,sob::SobolSamples)
     for i = 1:length(formC)
         formC[i] = sample_results[(2+i-1)*sob.N+1:(2+i)*sob.N,:]
     end
+
+    #println(sample_results)
+    println(sample_results[1:10,:])
+    println("  ")
 
     SobolEvalsSingle(sob.N,sob.P,sob.dist,sample_results[1:sob.N,:],sample_results[sob.N+1:2*sob.N,:],formC)
 
@@ -272,9 +275,10 @@ function sobolSampler(f::Function,sob::SobolSamples)
 
     fout = f(sob.A[1,:])
 
-    sample_results = zeros(sob.N*(sob.P + 2),length(fout))
+    #sample_results = zeros(sob.N*(sob.P + 2),length(fout))
+    sample_results = SharedArray{Float64,2}((sob.N*(sob.P + 2),length(fout)), init = 0)
     
-    for i = 1:size(sample_results,1)
+    @sync @parallel for i = 1:size(sample_results,1)
         if i < sob.N + 1
             sample_results[i,:] = f(sob.A[i,:])
 
@@ -296,13 +300,12 @@ function sobolSampler(f::Function,sob::SobolSamples)
         formC[i] = sample_results[(2+i-1)*sob.N+1:(2+i)*sob.N,:]
     end
 
-    #SobolEvalsSingle(sob.N,sob.P,sob.dist,sample_results[1:sob.N,:],sample_results[sob.N+1:2*sob.N,:],formC)
-
     fA = sample_results[1:sob.N,:]
     fB = sample_results[sob.N+1:2*sob.N,:]
 
+    #sample_results = zeros(binomial(sob.P,2)*sob.N,length(fout))
+    sample_results = SharedArray{Float64,2}((binomial(sob.P,2)*sob.N,length(fout)), init = 0)
 
-    sample_results = zeros(binomial(sob.P,2)*sob.N,length(fout))
     formctemp = zeros(Int,binomial(sob.P,2),2)
     counter = 1
     for i = 1:sob.P-1, j = i+1:sob.P
@@ -312,7 +315,7 @@ function sobolSampler(f::Function,sob::SobolSamples)
     Cij = kron(formctemp, ones(Int,sob.N))
         
     
-    for i = 1:size(sample_results,1)
+    @sync @parallel for i = 1:size(sample_results,1)
             n = Int(mod(i,sob.N))
             n == 0 ? n = sob.N : n
             #println("i = ",i,", n = ",n,", cval = ",cval)
@@ -331,7 +334,6 @@ function sobolSampler(f::Function,sob::SobolSamples)
 end
 
 
-## Also not working.  Seems to depend on the number of samples given!
 function computeSensSi(S::SobolEvals)
 
     sensSi = zeros(S.P, size(S.fA,2))
@@ -391,7 +393,7 @@ end
 
 
 
-## Not working!  Seems to be dependent on size of samples!
+
 function computeSensSij(S::SobolEvalsSingleAndJoint)
 
     sensSi = zeros(S.P, size(S.fA,2))
@@ -405,7 +407,6 @@ function computeSensSij(S::SobolEvalsSingleAndJoint)
         sensSi[i,:] = (vari/(S.N-1.0)-mmi)./vy
     end
 
-    #mmi = mean(S.fA .* S.fB)
     for i = 1:length(S.Cpairs)
         vari = sum(S.fA .* S.fCij[i],1)
         mmi = mean(S.fA,1).* mean(S.fCij[i],1)
@@ -434,23 +435,19 @@ function computeSensSijT(S::SobolEvalsSingleAndJoint)
 end
 
 
-function computeSensSijboot!(sensSi::Array{Float64,2},S::SobolEvalsSingleAndJoint,inds)
-
-    sensSi = zeros(S.P, size(S.fA[inds,:],2))
-    sensSij = zeros(length(S.Cpairs), size(S.fA[inds,:],2))
+function computeSensSijboot!(sensSi::Array{Float64,2},sensSij::Array{Float64,2},S::SobolEvalsSingleAndJoint,inds)
 
     vy = var(S.fA[inds,:],1)
 
     for i = 1:S.P
-        vari = sum(S.fA[inds,:] .* S.fC[i][inds,:],1)
-        mmi = mean(S.fA[inds,:],1).* mean(S.fC[i][inds,:],1)
+        vari = sum(view(S.fA,inds,:) .* view(S.fC[i],inds,:),1)
+        mmi = mean(view(S.fA,inds,:),1).* mean(view(S.fC[i],inds,:),1)
         sensSi[i,:] = (vari/(S.N-1.0)-mmi)./vy
     end
 
-    #mmi = mean(S.fA .* S.fB)
     for i = 1:length(S.Cpairs)
-        vari = sum(S.fA[inds,:] .* S.fCij[i][inds,:],1)
-        mmi = mean(S.fA[inds,:],1).* mean(S.fCij[i][inds,:],1)
+        vari = sum(view(S.fA,inds,:) .* view(S.fCij[i],inds,:),1)
+        mmi = mean(view(S.fA,inds,:),1).* mean(view(S.fCij[i],inds,:),1)
         sensSij[i,:] = (vari/(S.N-1.0)-mmi)./vy
     end
     for i = 1:length(S.Cpairs)
@@ -477,21 +474,30 @@ end
 function sensSijSTD(S::SobolEvalsSingleAndJoint, N::Int)
 
     sensSij = computeSensSij(S)
-    sensSTD = Array{OnlineStats.Series,2}(size(sensSi))
-    apxhist = Array{OnlineStats.Hist,2}(size(sensSi))
-    for i = 1:size(sensSi,1), j = 1:size(sensSi,2)
-        apxhist[i,j] = Hist(-0.1:0.001:1.1)
-        sensSTD[i,j] = Series(sensSi[i,j], apxhist[i,j], Mean(), Variance(), Moments(), Extrema())
+    sensSTD = Array{OnlineStats.Series,2}(size(sensSij[1]))
+    apxhist = Array{OnlineStats.Hist,2}(size(sensSij[1]))
+    sensSijSTD = Array{OnlineStats.Series,2}(size(sensSij[2]))
+    apxhistSij = Array{OnlineStats.Hist,2}(size(sensSij[2]))
+    for i = 1:size(sensSij[1],1), j = 1:size(sensSij[1],2)
+        apxhist[i,j] = Hist(-0.1:0.01:1.1)
+        sensSTD[i,j] = Series(sensSij[1][i,j], apxhist[i,j], Mean(), Variance(), Extrema())
+    end
+    for i = 1:size(sensSij[2],1), j = 1:size(sensSij[2],2)
+        apxhistSij[i,j] = Hist(-0.1:0.01:1.1)
+        sensSijSTD[i,j] = Series(sensSij[2][i,j], apxhistSij[i,j], Mean(), Variance(), Extrema())
     end
         
     for i = 2:N
         samp = rand(1:S.N,S.N)
-        computeSensSijboot!(sensSi,S,samp)
-        for i = 1:size(sensSi,1), j = 1:size(sensSi,2)
-            fit!(sensSTD[i,j],sensSi[i,j])
+        computeSensSijboot!(sensSij[1],sensSij[2],S,samp)
+        for i = 1:size(sensSij[1],1), j = 1:size(sensSij[1],2)
+            fit!(sensSTD[i,j],sensSij[1][i,j])
+        end
+	for i = 1:size(sensSij[2],1), j = 1:size(sensSij[2],2)
+            fit!(sensSijSTD[i,j],sensSij[2][i,j])
         end
     end
-    sensSTD
+    sensSTD,sensSijSTD
 end
 
 
@@ -503,7 +509,7 @@ function sensSiSTD(S::SobolEvalsSingle, N::Int)
     apxhist = Array{OnlineStats.Hist,2}(size(sensSi))
     for i = 1:size(sensSi,1), j = 1:size(sensSi,2)
         apxhist[i,j] = Hist(-0.1:0.001:1.1)
-        sensSTD[i,j] = Series(sensSi[i,j], apxhist[i,j], Mean(), Variance(), Moments(), Extrema())
+        sensSTD[i,j] = Series(sensSi[i,j], apxhist[i,j], Mean(), Variance(), Extrema())
     end
         
     for i = 2:N
@@ -524,7 +530,7 @@ function sensSiTSTD(S::SobolEvalsSingle, N::Int)
     apxhist = Array{OnlineStats.Hist,2}(size(sensSiT))
     for i = 1:size(sensSiT,1), j = 1:size(sensSiT,2)
         apxhist[i,j] = Hist(-0.1:0.001:1.1)
-        sensSTD[i,j] = Series(sensSiT[i,j], apxhist[i,j], Mean(), Variance(), Moments(), Extrema())
+        sensSTD[i,j] = Series(sensSiT[i,j], apxhist[i,j], Mean(), Variance(), Extrema())
     end
 
     for i = 2:N
