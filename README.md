@@ -15,7 +15,7 @@ emulator).
 
 To install, use the command:
 ```julia
-Pkg.clone("git:github.com/mstobb/VarianceBasedSensitivity.jl.git")
+Pkg.clone("git://github.com/mstobb/VarianceBasedSensitivity.jl.git")
 ```
 which will clone the repository and install.
 
