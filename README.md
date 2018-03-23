@@ -13,7 +13,13 @@ with a user supplied function.  For large or complex functions, an emulator is
 typically used, but this is not implemented here (i.e. construct your own
 emulator).
 
-Typical usage might look something like the following:
+To install, use the command:
+```julia
+Pkg.clone("git:github.com/mstobb/VarianceBasedSensitivity.jl.git")
+```
+which will clone the repository and install.
+
+Typical usage might look the following:
 ```julia
 using VarianceBasedSensitivity, Distributions
 
