@@ -7,6 +7,8 @@ module VarianceBasedSensitivity
 # Include the type definitions
 include("types.jl")
 
+# Include test functions
+include("test_functions.jl")
 
 export SobolDists, SobolSamples, SobolEvals
 export SobolEvalsSingle, SobolEvalsJoint
