@@ -1,5 +1,7 @@
 using Distributions
 using OnlineStats
+using Distributed
+using SharedArrays
 
 
 module VarianceBasedSensitivity
@@ -143,7 +145,7 @@ function sobolSamplerSingle(f::Function,sob::SobolSamples)
     #sample_results = zeros(Float64,sob.N*(sob.P + 2),length(fout))
     sample_results = SharedArray{Float64,2}((sob.N*(sob.P + 2),length(fout)), init = 0)
 
-    @sync @parallel for i = 1:size(sample_results,1)
+    @sync @distributed for i = 1:size(sample_results,1)
         if i < sob.N + 1
             sample_results[i,:] = f(sob.A[i,:])
 
@@ -238,7 +240,7 @@ function sobolSampler(f::Function,sob::SobolSamples)
 
     # my pmap call is not working correctly and is FAR too slow
     #pmap((x)->singleSobolSampleEvaluator(x,sample_results,sob,f),1:sob.N*(sob.P+2); batch_size = 100)
-    @sync @parallel for i = 1:size(sample_results,1)
+    @sync @distributed for i = 1:size(sample_results,1)
         singleSobolSampleEvaluator(i,sample_results,sob,f)
     end
 
@@ -262,7 +264,7 @@ function sobolSampler(f::Function,sob::SobolSamples)
     Cij = kron(formctemp, ones(Int,sob.N))
 
     # pmap((x)->jointSobolSampleEvaluator(x,sample_results,Cij,sob,f),1:(binomial(sob.P,2)*sob.N); batch_size = 100)
-    @sync @parallel for i = 1:size(sample_results,1)
+    @sync @distributed for i = 1:size(sample_results,1)
         jointSobolSampleEvaluator(i,sample_results,Cij,sob,f)
     end
 

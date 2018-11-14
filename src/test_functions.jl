@@ -7,14 +7,14 @@ function sobolG(x::Array{Float64,1}; a = [0.0, 0.0, 0.0, 0.4, 0.4, 5.0])
         error("Inputs are of different lenths!")
     end
 
-    return prod((abs.(4*x - 2) .+ a)./(1.+a));
+    return prod((abs.(4*x - 2) .+ a)./(1 .+ a));
 end
 
 function sobolG_analytic(; a = [0.0, 0.0, 0.0, 0.4, 0.4, 5.0])
     y = zeros(2,length(a))
 
     # Compute Vi, the first order indicies
-    Vi = (1/3).*(1.+a).^(-2)
+    Vi = (1/3).*(1 .+a).^(-2)
     y[1,:] = Vi
 
     # Use the Vi to compute the total order index, but first determine all
@@ -75,7 +75,7 @@ function monomialDegrees(numVars::Integer, maxDegree::Integer)
     	# For each degree (starting at 1) up to maxDegree...
     	for n = 1:maxDegree
     	    # Find the integers that divide up the RV permutations
-    	    dividers = flipdim(hcat(collect(combinations(collect(1:(n+k-1)), k-1))...).',1);
+    	    dividers = flipdim(transpose(hcat(collect(combinations(collect(1:(n+k-1)), k-1))...)),1);
     	    div_diff = zeros(Int64,size(dividers,1),size(dividers,2)-1);
     	    for i = 1:size(dividers,1)
     		          div_diff[i,:] = diff(vec(dividers[i,:]));
