@@ -1,7 +1,5 @@
 using Distributions
 using OnlineStats
-using Distributed
-using SharedArrays
 
 
 module VarianceBasedSensitivity
